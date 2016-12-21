@@ -99,8 +99,63 @@ def create_processed_files(pid, word_ids, direc, max_seq_length, datatype, li_lo
     stdout_lock.release()
     li_lock.release()
 
+def process_review(review_filepath, word_ids, max_seq_length, data_type):
+    # take a review at review_filepath, convert it into a numpy array of scalars
+    # pad the end with zeros if necessary
+    # the padding step is very important - it allows us to deduce the length of the
+    # review, and pass this as a seq_length argument to the LSTM when it does
+    # sentiment analysis.
+    # store it in a new file- return the filepath to calling function
+    data = np.array([i for i in range(max_seq_length)])
+    word_indices = []
 
-def saveData(npArray, path):
+    # handle case where file already exists - don't process again!
+    processed_dir = os.path.join("imdb_data/processed",data_type)
+    if not os.path.exists(processed_dir):
+        os.makedirs(processed_dir)
+    new_name = Helper.remove_file_extension(process(review_filepath)) + ".npy"
+    processed_path = os.path.join(processed_dir, new_name)
+    if os.path.exists(processed_path):
+        return processed_path
+
+    with open(review_filepath, 'r') as review:
+        # first read the file contents into a buffer
+        content = review.read().lower()
+    # strip the punctuation and unnecessary bits - TODO put this into Helper class
+    # get back a list of words
+    word_list = cleanup(content)
+    for word in word_list:
+        if word in word_ids:
+            token = word_ids[word]
+        else:
+            token = word_ids["UNK"]
+        word_indices.append(token)
+    # post processing
+    # pad sequence to max length
+    if len(word_indices) < max_seq_length:
+        padding = word_ids["<PAD>"]
+        assert(padding == 0) # useful sanity check - important for later.
+        # could use a negative number if need be, but it's not that important
+        word_indices = word_indices + [padding for i in range(max_seq_length - len(word_indices))]
+    else:
+        word_indices = word_indices[0:max_seq_length]
+    data = np.vstack((data, word_indices))
+    # data is set up to have the right size, but the first row is just full of dummy data.
+    # this slicing procedure extracts JUST the word indices.
+    data = data[1::]
+    save_data(data, processed_path)
+    return processed_path
+
+def cleanup(text):
+    table = string.maketrans("", "")
+    # reads the words from all_data.txt into a buffer
+    li = text.split('<br /><br />')
+    tmp = " ".join(li)
+    tmp = tmp.translate(table, string.punctuation).lower()
+    li = tmp.split()
+    return li
+
+def save_data(npArray, path):
     start = os.getcwd()
     path = os.path.join(start, path)
     np.save(path, npArray)
